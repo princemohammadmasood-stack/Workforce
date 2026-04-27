@@ -68,6 +68,16 @@ REF_MC = {
     'weekend': {'Night': 1, 'Morning': 5, 'Afternoon': 5, 'Evening': 3},
 }
 
+# Reference avg opps per window per day (from full dataset, used for capacity scaling)
+REF_WINDOW_VOL = {
+    'weekday': {'Night': 12.0, 'Morning': 45.2, 'Afternoon': 44.5, 'Evening': 15.0},
+    'weekend': {'Night': 10.7, 'Morning': 25.6, 'Afternoon': 27.2, 'Evening': 11.7},
+}
+REF_WD_DAILY = sum(REF_WINDOW_VOL['weekday'].values())  # ~116.7
+REF_WE_DAILY = sum(REF_WINDOW_VOL['weekend'].values())  # ~75.2
+
+DEFAULT_MAX_OPPS_PER_REP = 6
+
 
 def solve_shift_lp(requirements, max_days_per_week=6):
     """LP: minimize total employees subject to per-slot coverage."""
@@ -129,28 +139,43 @@ def solve_shift_lp(requirements, max_days_per_week=6):
     return {'total': total, 'assigned': assigned, 'coverage': coverage, 'requirements': requirements}
 
 
-def compute_staffing(monthly_opps, availability=0.60, sla_level='95%', max_days=6):
-    """Monthly volume -> headcount + shift roster."""
+def compute_staffing(monthly_opps, availability=0.60, sla_level='95%', max_days=6,
+                     max_opps_per_rep=6):
+    """Monthly volume -> headcount + shift roster with capacity constraint."""
     sla_factor = {'90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
     avail_factor = 0.60 / availability
     volume_ratio = monthly_opps / REF_MONTHLY
 
     reqs = {}
     window_detail = {}
+    capacity_detail = {}
     for d in DAYS:
         is_we = d in ['Saturday', 'Sunday']
         day_type = 'weekend' if is_we else 'weekday'
         for w in WINDOWS:
+            # Queueing-based requirement (SLA-driven)
             ref = REF_MC[day_type][w]
-            new = max(1, round(ref * np.sqrt(volume_ratio) * sla_factor * avail_factor))
-            reqs[(d, w)] = new
-            window_detail[(day_type, w)] = new
+            queueing_req = max(1, round(ref * np.sqrt(volume_ratio) * sla_factor * avail_factor))
+
+            # Capacity-based requirement (max opps per rep)
+            scaled_window_vol = REF_WINDOW_VOL[day_type][w] * volume_ratio
+            capacity_req = max(1, int(np.ceil(scaled_window_vol / max_opps_per_rep)))
+
+            # Final = max of both constraints
+            final_req = max(queueing_req, capacity_req)
+            reqs[(d, w)] = final_req
+            window_detail[(day_type, w)] = final_req
+            capacity_detail[(day_type, w)] = {
+                'queueing': queueing_req, 'capacity': capacity_req,
+                'binding': 'Capacity' if capacity_req > queueing_req else 'SLA',
+                'window_vol': round(scaled_window_vol, 1),
+            }
 
     sol = solve_shift_lp(reqs, max_days)
     return {
         'monthly_opps': monthly_opps, 'total': sol['total'] if sol else None,
         'per_window': window_detail, 'solution': sol,
-        'volume_ratio': volume_ratio,
+        'volume_ratio': volume_ratio, 'capacity_detail': capacity_detail,
     }
 
 
@@ -280,6 +305,14 @@ with st.sidebar:
 
     sla_level = st.selectbox("SLA Target", ['90%', '95%', '99%'], index=1)
 
+    max_opps_per_rep = st.slider(
+        "Max Opportunities / Rep / Day",
+        min_value=3, max_value=10, value=6, step=1,
+        help="Maximum number of opportunities a single rep can handle per day. "
+             "Acts as a capacity floor — if window volume exceeds this limit × reps, "
+             "more staff are required regardless of SLA."
+    )
+
     max_days = st.radio(
         "Max Days / Week", [5, 6], index=1,
         format_func=lambda x: f"{x}-day work week"
@@ -299,14 +332,15 @@ with st.sidebar:
 st.markdown('<p class="main-header">B2C Sales Team Workforce Optimization</p>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Meydan Free Zone  |  Staffing Calculator</p>', unsafe_allow_html=True)
 
-result = compute_staffing(monthly_opps, availability, sla_level, max_days)
+result = compute_staffing(monthly_opps, availability, sla_level, max_days, max_opps_per_rep)
 
 # --- Top Metrics ---
-m1, m2, m3, m4 = st.columns(4)
+m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Employees Required", result['total'])
 m2.metric("Monthly Volume", f"{monthly_opps:,}")
 m3.metric("Availability", f"{availability:.0%}")
 m4.metric("SLA Target", sla_level)
+m5.metric("Max Opps/Rep", max_opps_per_rep)
 
 st.markdown("---")
 
@@ -406,14 +440,38 @@ with tabs[tab_idx]:
 
         st.subheader("Per-Window Staffing Requirements")
         pw = result['per_window']
+        cd = result.get('capacity_detail', {})
         pw_rows = []
         for dt in ['weekday', 'weekend']:
             row = {'Day Type': dt.capitalize()}
             for w in WINDOWS:
                 col_label = f"{w} ({WINDOW_LABELS[w]})"
-                row[col_label] = pw.get((dt, w), 0)
+                staff = pw.get((dt, w), 0)
+                detail = cd.get((dt, w), {})
+                binding = detail.get('binding', '')
+                vol = detail.get('window_vol', 0)
+                row[col_label] = f"{staff}  [{binding}]"
             pw_rows.append(row)
         st.dataframe(pd.DataFrame(pw_rows), use_container_width=True, hide_index=True)
+        st.caption("Binding constraint: [SLA] = queueing/response time driven | "
+                   "[Capacity] = max opps per rep driven")
+
+        # Detailed breakdown table
+        st.subheader("Constraint Breakdown")
+        bd_rows = []
+        for dt in ['weekday', 'weekend']:
+            for w in WINDOWS:
+                detail = cd.get((dt, w), {})
+                bd_rows.append({
+                    'Day Type': dt.capitalize(),
+                    'Window': f"{w} ({WINDOW_LABELS[w]})",
+                    'Avg Opps/Window': detail.get('window_vol', 0),
+                    'SLA Requirement': detail.get('queueing', 0),
+                    'Capacity Requirement': detail.get('capacity', 0),
+                    'Final (max)': pw.get((dt, w), 0),
+                    'Binding': detail.get('binding', ''),
+                })
+        st.dataframe(pd.DataFrame(bd_rows), use_container_width=True, hide_index=True)
 
         st.subheader("Shift Distribution")
         s_df = pd.DataFrame(result['solution']['assigned'])
@@ -469,7 +527,7 @@ with tabs[tab_idx]:
     cr = []
     for v in vols:
         for av in [0.50, 0.60, 0.70]:
-            r = compute_staffing(v, av, sla_level, max_days)
+            r = compute_staffing(v, av, sla_level, max_days, max_opps_per_rep)
             cr.append({'Monthly Volume': v, 'Availability': f"{av:.0%}", 'Headcount': r['total']})
     c_df = pd.DataFrame(cr)
 
@@ -495,14 +553,15 @@ with tabs[tab_idx]:
         row = {'Volume': f"{v:,}"}
         for av in [0.50, 0.60, 0.70]:
             for sla in ['90%', '95%', '99%']:
-                r = compute_staffing(v, av, sla, max_days)
+                r = compute_staffing(v, av, sla, max_days, max_opps_per_rep)
                 row[f"{av:.0%} / {sla}"] = r['total']
         s_rows.append(row)
     st.dataframe(pd.DataFrame(s_rows), use_container_width=True, hide_index=True)
 
     st.info(f"Current selection: **{monthly_opps:,}** opps/mo | "
             f"**{availability:.0%}** availability | **{sla_level}** SLA | "
-            f"**{max_days}-day** week | **{result['total']} employees**")
+            f"**{max_days}-day** week | Max **{max_opps_per_rep}** opps/rep | "
+            f"**{result['total']} employees**")
 
 # =============================================================================
 # FOOTER
@@ -521,11 +580,12 @@ not headcount. Reps respond in 4 minutes once assigned.
     """)
 
 with st.expander("Assumptions"):
-    st.markdown("""
+    st.markdown(f"""
 - **Service Time:** ~9 min blended (45% pickup x 12.5 min call + 55% x 2 min no-answer)
 - **SLA Window:** 30 min from pool entry to first contact
 - **Availability:** Accounts for post-sale support (~30%), admin, breaks
 - **Weekend:** Saturday/Sunday, ~60% of weekday volume
+- **Max Opps/Rep:** Currently set to **{max_opps_per_rep}** per rep per window — acts as a capacity floor alongside the SLA-driven queueing requirement
     """)
 
 with st.expander("Input File Format"):
