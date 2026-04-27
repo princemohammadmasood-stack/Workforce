@@ -45,6 +45,22 @@ WINDOW_HOURS = {
     'Afternoon': list(range(14, 20)), 'Evening': list(range(20, 24)),
 }
 
+# Time range labels
+WINDOW_LABELS = {
+    'Night':     '12:00 AM – 08:00 AM',
+    'Morning':   '08:00 AM – 02:00 PM',
+    'Afternoon': '02:00 PM – 08:00 PM',
+    'Evening':   '08:00 PM – 12:00 AM',
+}
+
+SHIFT_LABELS = {
+    'Night':     '12:00 AM – 08:00 AM  (8 hrs)',
+    'Morning':   '08:00 AM – 02:00 PM  (6 hrs)',
+    'Afternoon': '02:00 PM – 08:00 PM  (6 hrs)',
+    'Evening':   '08:00 PM – 12:00 AM  (4 hrs)',
+    'Day':       '08:00 AM – 08:00 PM  (12 hrs)',
+}
+
 # Pre-calibrated Monte Carlo baseline (from full assessment)
 REF_MONTHLY = 3147
 REF_MC = {
@@ -94,8 +110,10 @@ def solve_shift_lp(requirements, max_days_per_week=6):
     for n in patterns:
         val = x[n].value()
         if val and val > 0:
+            shift_name = patterns[n]['time_shift']
             assigned.append({
-                'Count': int(val), 'Shift': patterns[n]['time_shift'],
+                'Count': int(val), 'Shift': shift_name,
+                'Timing': SHIFT_LABELS.get(shift_name, ''),
                 'Days/Week': patterns[n]['days_per_week'],
                 'Working Days': ', '.join(d[:3] for d in patterns[n]['work_days']),
             })
@@ -292,6 +310,14 @@ m4.metric("SLA Target", sla_level)
 
 st.markdown("---")
 
+# --- Shift Timing Reference ---
+with st.expander("Shift & Window Timing Reference", expanded=False):
+    ref_rows = []
+    for shift, timing in SHIFT_LABELS.items():
+        covers = "Morning + Afternoon" if shift == 'Day' else shift
+        ref_rows.append({'Shift Type': shift, 'Timing': timing, 'Covers Window(s)': covers})
+    st.dataframe(pd.DataFrame(ref_rows), use_container_width=True, hide_index=True)
+
 # --- Build Tabs ---
 tab_names = []
 if data_stats:
@@ -384,13 +410,15 @@ with tabs[tab_idx]:
         for dt in ['weekday', 'weekend']:
             row = {'Day Type': dt.capitalize()}
             for w in WINDOWS:
-                row[w] = pw.get((dt, w), 0)
+                col_label = f"{w} ({WINDOW_LABELS[w]})"
+                row[col_label] = pw.get((dt, w), 0)
             pw_rows.append(row)
         st.dataframe(pd.DataFrame(pw_rows), use_container_width=True, hide_index=True)
 
         st.subheader("Shift Distribution")
         s_df = pd.DataFrame(result['solution']['assigned'])
-        fig_s = px.bar(s_df, x='Shift', y='Count', color='Shift', text='Count',
+        s_df['Shift Label'] = s_df['Shift'].map(lambda s: f"{s}\n{SHIFT_LABELS.get(s, '')}")
+        fig_s = px.bar(s_df, x='Shift Label', y='Count', color='Shift', text='Count',
                        color_discrete_map={'Day': '#2c3e50', 'Morning': '#3498db',
                                            'Afternoon': '#e67e22', 'Evening': '#9b59b6',
                                            'Night': '#34495e'})
@@ -414,15 +442,17 @@ with tabs[tab_idx]:
             for w in WINDOWS:
                 c_val, r_val = cov[(d, w)], req[(d, w)]
                 delta = c_val - r_val
-                row[w] = f"{c_val} / {r_val}" + (f" (+{delta})" if delta > 0 else "")
+                col_label = f"{w} ({WINDOW_LABELS[w]})"
+                row[col_label] = f"{c_val} / {r_val}" + (f" (+{delta})" if delta > 0 else "")
             c_rows.append(row)
         st.dataframe(pd.DataFrame(c_rows), use_container_width=True, hide_index=True)
         st.caption("Format: Scheduled / Required. * = Weekend")
 
         st.subheader("Coverage Heatmap")
         hm_vals = [[cov[(d, w)] for w in WINDOWS] for d in DAYS]
+        hm_x_labels = [f"{w}\n{WINDOW_LABELS[w]}" for w in WINDOWS]
         fig_hm = go.Figure(data=go.Heatmap(
-            z=hm_vals, x=WINDOWS, y=[d[:3] for d in DAYS],
+            z=hm_vals, x=hm_x_labels, y=[d[:3] for d in DAYS],
             text=[[str(v) for v in row] for row in hm_vals],
             texttemplate="%{text}", colorscale='Blues',
             showscale=True, colorbar_title="Reps",
