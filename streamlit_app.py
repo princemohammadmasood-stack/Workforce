@@ -581,8 +581,13 @@ with tabs[tab_idx]:
     st.subheader("Recommended Shift Assignments")
 
     if result and result.get('total'):
-        # Assignments table
-        roster_df = pd.DataFrame(result['assigned'])
+        # Get assignments (different structure for default vs custom)
+        if is_custom:
+            assigned_data = result.get('assigned', [])
+        else:
+            assigned_data = result.get('solution', {}).get('assigned', [])
+
+        roster_df = pd.DataFrame(assigned_data)
         roster_df.index = range(1, len(roster_df) + 1)
         roster_df.index.name = '#'
         st.dataframe(roster_df, use_container_width=True)
