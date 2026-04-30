@@ -496,9 +496,97 @@ with st.sidebar:
                 st.caption(f"  {format_hour(start)} – {format_hour(end)} ({dur}h)")
 
     st.markdown("---")
-    st.caption("Post-restructuring: ~2,150/mo")
-    st.caption("Pre-restructuring: ~3,500/mo")
-    st.caption("Current team: 17 reps")
+    st.markdown("### Detailed Assessment")
+    show_assessment = st.button("View Assessment", use_container_width=True,
+                                 type="primary")
+
+
+# =============================================================================
+# DETAILED ASSESSMENT DIALOG
+# =============================================================================
+
+@st.dialog("Detailed Assessment — Will This Model Deliver 95% SLA?", width="large")
+def show_assessment_dialog():
+    st.markdown("""
+### The Short Answer
+
+**The staffing numbers are correct — but they alone will NOT achieve the SLA target.**
+
+The model gives you the right number of people. However, it assumes opportunities are 
+assigned to reps **immediately** when they enter the pool. Your current reality is a 
+**6.6-hour median assignment delay**. That gap alone breaks the 30-minute SLA before 
+any rep even sees the opportunity.
+
+---
+
+### The Chain — And Where It Breaks
+
+**What the model guarantees:**
+
+Once a rep receives an opportunity, the staffing level ensures enough capacity for 95% 
+of contacts to happen within the SLA window. This was validated via Monte Carlo simulation 
+across 10,000 simulated days, accounting for bursty arrivals, bimodal call times 
+(2 min no-answer vs 10-15 min productive call), and stochastic rep availability.
+
+**What the model cannot fix:**
+
+The **6.6-hour median time** from "Opportunity Created" to "Assignment to Rep." 
+The descriptive statistics showed that reps respond in a **median of 4 minutes** 
+after assignment. The reps are fast. The assignment mechanism is the entire problem.
+
+---
+
+### The Real Formula for Success
+
+**Correct staffing + Assignment workflow fix = 95% SLA achievable**
+
+Without the assignment fix, you could have 50 reps and still fail the SLA, because 
+opportunities sit in the unassigned pool for hours regardless of how many reps are waiting.
+
+---
+
+### What the Assignment Fix Looks Like
+
+**Option 1 — Auto-Assignment (Recommended):** Configure Zoho CRM round-robin. 
+Opportunity is created → immediately assigned to the next available rep in rotation. 
+Pool time drops from hours to seconds.
+
+**Option 2 — Queue-Pull Model:** Reps see a live queue and pull the next opportunity 
+themselves. Pool time equals the time until a rep finishes their current task.
+
+Either approach eliminates the 6.6-hour bottleneck. With that fix in place and the 
+recommended staffing on your selected shift structure, the model's 95% SLA prediction holds.
+
+---
+
+### Three Priority Actions
+
+**1. Fix assignment workflow** — auto-assign or queue-pull in Zoho CRM. 
+Expected impact: SLA from 15.6% to 90%+ with NO additional hires.
+
+**2. Separate post-sale support from sales reps** — currently consuming ~30% of rep time. 
+A dedicated support function pushes availability from 60% toward 70-80%, saving 2-3 FTEs.
+
+**3. Implement recommended shift coverage** — use the model's shift roster to ensure 
+peak hours (2 PM–8 PM) have adequate concurrent coverage, including weekends.
+
+---
+
+### Key Diagnostic Numbers
+
+| Metric | Current State | With Fix |
+|--------|--------------|----------|
+| Pool Time (median) | 6.6 hours | < 1 minute |
+| Contact Time (median) | 4 minutes | 4 minutes |
+| 30-min SLA Adherence | 15.6% | 90-95% (projected) |
+| Root Cause | Assignment delay | Eliminated |
+    """)
+
+    if st.button("Close", use_container_width=True):
+        st.rerun()
+
+if show_assessment:
+    show_assessment_dialog()
 
 
 # =============================================================================
