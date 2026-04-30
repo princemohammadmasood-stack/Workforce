@@ -232,7 +232,8 @@ def compute_default_staffing(monthly_opps, availability=0.60, sla_level='95%',
             ref = REF_MC[day_type][w]
             queueing_req = max(1, round(ref * np.sqrt(volume_ratio) * sla_factor * avail_factor))
             scaled_vol = REF_WINDOW_VOL[day_type][w] * volume_ratio
-            capacity_req = max(1, int(math.ceil(scaled_vol / max_opps_per_rep)))
+            effective_capacity = max_opps_per_rep * availability
+            capacity_req = max(1, int(math.ceil(scaled_vol / effective_capacity)))
             final_req = max(queueing_req, capacity_req)
             reqs[(d, w)] = final_req
             window_detail[(day_type, w)] = final_req
@@ -274,11 +275,12 @@ def solve_custom_shift_lp(shifts, monthly_opps, availability, sla_level,
         hours = get_shift_hours(s['start'], s['end'])
         wd_opps = sum(REF_HOURLY_LAMBDA['weekday'][h] for h in hours) * volume_ratio
         we_opps = sum(REF_HOURLY_LAMBDA['weekend'][h] for h in hours) * volume_ratio
+        effective_capacity = max_opps_per_rep * availability
         shift_info.append({
             **s, 'hours': hours, 'duration': len(hours),
             'wd_opps': round(wd_opps, 1), 'we_opps': round(we_opps, 1),
-            'wd_cap': max(1, int(math.ceil(wd_opps / max_opps_per_rep))),
-            'we_cap': max(1, int(math.ceil(we_opps / max_opps_per_rep))),
+            'wd_cap': max(1, int(math.ceil(wd_opps / effective_capacity))),
+            'we_cap': max(1, int(math.ceil(we_opps / effective_capacity))),
         })
 
     # Day patterns
@@ -963,7 +965,7 @@ with st.expander("Assumptions"):
 - **Service Time:** ~9 min blended (45% pickup x 12.5 min call + 55% x 2 min no-answer)
 - **SLA:** 30 min from pool entry to first contact | Target: **{sla_level}**
 - **Availability:** **{availability:.0%}** — post-sale support, admin, breaks
-- **Max Opps/Rep:** **{max_opps_per_rep}** per shift — capacity floor constraint
+- **Max Opps/Rep:** **{max_opps_per_rep}** per shift (effective: **{max_opps_per_rep * availability:.1f}** after availability adjustment)
     """)
 
 with st.expander("Input File Format"):
