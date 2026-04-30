@@ -510,7 +510,7 @@ def show_assessment_dialog():
     st.markdown("""
 ### Summary
 
-The model gives you the right number of people. However, it assumes opportunities are 
+The model gives the right number of people. However, it assumes opportunities are 
 assigned to reps **immediately** when they enter the pool. Our current reality is a 
 **6.6-hour median assignment delay**. That gap alone breaks the 30-minute SLA before 
 any rep even sees the opportunity.
