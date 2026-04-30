@@ -662,6 +662,94 @@ tab_idx += 1
 
 # ─── TAB: Coverage ───
 with tabs[tab_idx]:
+
+    # --- Demand vs Coverage Overlay Chart (both modes) ---
+    st.subheader("24-Hour Demand vs Agent Coverage")
+
+    day_toggle = st.radio("Day Type", ["Weekday", "Weekend"], horizontal=True, key="demand_dt")
+    dt_key = 'weekday' if day_toggle == "Weekday" else 'weekend'
+    volume_ratio = monthly_opps / REF_MONTHLY
+
+    hour_labels_12h = [format_hour(h) for h in range(24)]
+
+    # Hourly opportunity arrivals (scaled to current volume)
+    opps_by_hour = [REF_HOURLY_LAMBDA[dt_key][h] * volume_ratio for h in range(24)]
+
+    # Hourly agent requirement (scaled)
+    sla_factor = {'90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
+    avail_factor = 0.60 / availability
+    agents_by_hour = [max(1, round(REF_HOURLY_STAFF[dt_key][h] * np.sqrt(volume_ratio)
+                     * sla_factor * avail_factor)) for h in range(24)]
+
+    # Scheduled coverage (from LP solution, pick a representative day)
+    if is_custom and result and result.get('coverage'):
+        rep_day = 'Monday' if day_toggle == "Weekday" else 'Saturday'
+        scheduled_by_hour = [result['coverage'].get((rep_day, h), 0) for h in range(24)]
+    elif not is_custom and result and result.get('solution'):
+        # Map window coverage to hourly for default mode
+        rep_day = 'Monday' if day_toggle == "Weekday" else 'Saturday'
+        cov_default = result['solution']['coverage']
+        scheduled_by_hour = []
+        for h in range(24):
+            if h < 8:
+                w = 'Night'
+            elif h < 14:
+                w = 'Morning'
+            elif h < 20:
+                w = 'Afternoon'
+            else:
+                w = 'Evening'
+            scheduled_by_hour.append(cov_default.get((rep_day, w), 0))
+    else:
+        rep_day = 'Monday' if day_toggle == "Weekday" else 'Saturday'
+        scheduled_by_hour = [0] * 24
+
+    # Build dual-axis chart
+    fig_demand = go.Figure()
+
+    # Bars: opportunity arrivals
+    fig_demand.add_trace(go.Bar(
+        x=hour_labels_12h, y=opps_by_hour,
+        name='Avg Opportunities', marker_color='#d4e6f1', opacity=0.8,
+        yaxis='y',
+    ))
+
+    # Line: required agents
+    fig_demand.add_trace(go.Scatter(
+        x=hour_labels_12h, y=agents_by_hour,
+        name='Required Agents', mode='lines+markers',
+        line=dict(color='#e74c3c', width=2.5, dash='dash'),
+        marker=dict(size=6), yaxis='y2',
+    ))
+
+    # Line: scheduled agents
+    fig_demand.add_trace(go.Scatter(
+        x=hour_labels_12h, y=scheduled_by_hour,
+        name='Scheduled Agents', mode='lines+markers',
+        line=dict(color='#27ae60', width=2.5),
+        marker=dict(size=6), yaxis='y2',
+    ))
+
+    fig_demand.update_layout(
+        height=450,
+        margin=dict(l=50, r=50, t=30, b=50),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+        xaxis=dict(title='Hour of Day', tickangle=-45),
+        yaxis=dict(title='Opportunities / Hour', side='left', showgrid=False),
+        yaxis2=dict(title='Agents', side='right', overlaying='y', showgrid=True,
+                    gridcolor='rgba(0,0,0,0.05)'),
+        barmode='group',
+        hovermode='x unified',
+    )
+
+    st.plotly_chart(fig_demand, use_container_width=True)
+    st.caption(f"Bars = avg opportunities per hour at {monthly_opps:,}/mo. "
+               f"Red dashed = minimum agents required. "
+               f"Green solid = agents scheduled by LP ({rep_day}).")
+
+    st.markdown("---")
+
+    # --- Heatmaps (existing) ---
     if is_custom and result:
         st.subheader("Hourly Coverage Heatmap")
         view = st.radio("View", ["Scheduled", "Required", "Surplus"], horizontal=True, key="hm_v")
