@@ -511,7 +511,7 @@ def show_assessment_dialog():
 ### Summary
 
 The model gives you the right number of people. However, it assumes opportunities are 
-assigned to reps **immediately** when they enter the pool. Your current reality is a 
+assigned to reps **immediately** when they enter the pool. Our current reality is a 
 **6.6-hour median assignment delay**. That gap alone breaks the 30-minute SLA before 
 any rep even sees the opportunity.
 
@@ -538,34 +538,21 @@ after assignment. The reps are fast. The assignment mechanism is the entire prob
 
 **Correct staffing + Assignment workflow fix = 95% SLA achievable**
 
-Without the assignment fix, you could have 50 reps and still fail the SLA, because 
+Without the assignment fix, we could have 50 reps and still fail the SLA, because 
 opportunities sit in the unassigned pool for hours regardless of how many reps are waiting.
 
 ---
 
-### What the Assignment Fix Looks Like
-
-**Option 1 — Auto-Assignment (Recommended):** Configure Zoho CRM round-robin. 
-Opportunity is created → immediately assigned to the next available rep in rotation. 
-Pool time drops from hours to seconds.
-
-**Option 2 — Queue-Pull Model:** Reps see a live queue and pull the next opportunity 
-themselves. Pool time equals the time until a rep finishes their current task.
-
-Either approach eliminates the 6.6-hour bottleneck. With that fix in place and the 
-recommended staffing on your selected shift structure, the model's 95% SLA prediction holds.
-
----
 
 ### Three Priority Actions
 
-**1. Fix assignment workflow** — auto-assign or queue-pull in Zoho CRM. 
+**1. Fix assignment workflow** : auto-assign or queue-pull in Zoho CRM. 
 Expected impact: SLA from 15.6% to 90%+ with NO additional hires.
 
-**2. Separate post-sale support from sales reps** — currently consuming ~30% of rep time. 
+**2. Separate post-sale support from sales reps** : currently consuming ~30% of rep time. 
 A dedicated support function pushes availability from 60% toward 70-80%, saving 2-3 FTEs.
 
-**3. Implement recommended shift coverage** — use the model's shift roster to ensure 
+**3. Implement recommended shift coverage** : use the model's shift roster to ensure 
 peak hours (2 PM–8 PM) have adequate concurrent coverage, including weekends.
 
 ---
