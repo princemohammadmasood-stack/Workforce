@@ -218,7 +218,7 @@ def solve_default_lp(requirements, max_days_per_week=6):
 def compute_default_staffing(monthly_opps, availability=0.60, sla_level='95%',
                               max_days=6, max_opps_per_rep=6):
     """Default mode: monthly volume -> headcount using fixed 4 windows."""
-    sla_factor = {'90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
+    sla_factor = {'75%': 0.80, '80%': 0.85, '85%': 0.88, '90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
     avail_factor = 0.60 / availability
     volume_ratio = monthly_opps / REF_MONTHLY
 
@@ -257,7 +257,7 @@ def compute_default_staffing(monthly_opps, availability=0.60, sla_level='95%',
 def solve_custom_shift_lp(shifts, monthly_opps, availability, sla_level,
                            max_opps_per_rep, max_days_per_week=6):
     """LP with user-defined shifts, hourly coverage constraints."""
-    sla_factor = {'90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
+    sla_factor = {'75%': 0.80, '80%': 0.85, '85%': 0.88, '90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
     avail_factor = 0.60 / availability
     volume_ratio = monthly_opps / REF_MONTHLY
 
@@ -453,7 +453,7 @@ with st.sidebar:
     availability = st.slider("Rep Availability", 0.40, 0.85, 0.60, 0.05)
     st.caption(f"Selected: {availability:.0%}")
 
-    sla_level = st.selectbox("SLA Target", ['90%', '95%', '99%'], index=1)
+    sla_level = st.selectbox("SLA Target", ['75%', '80%', '85%', '90%', '95%', '99%'], index=4)
 
     max_opps_per_rep = st.slider("Max Opportunities / Rep / Day", 3, 10, 6, 1)
 
@@ -508,16 +508,18 @@ with st.sidebar:
 @st.dialog("Detailed Assessment — Will This Model Deliver 95% SLA?", width="large")
 def show_assessment_dialog():
     st.markdown("""
-### Summary
+### The Short Answer
 
-The model gives the right number of people. However, it assumes opportunities are 
-assigned to reps **immediately** when they enter the pool. Our current reality is a 
+**The staffing numbers are correct — but they alone will NOT achieve the SLA target.**
+
+The model gives you the right number of people. However, it assumes opportunities are 
+assigned to reps **immediately** when they enter the pool. Your current reality is a 
 **6.6-hour median assignment delay**. That gap alone breaks the 30-minute SLA before 
 any rep even sees the opportunity.
 
 ---
 
-### The Chain And Where It Breaks
+### The Chain — And Where It Breaks
 
 **What the model guarantees:**
 
@@ -538,21 +540,34 @@ after assignment. The reps are fast. The assignment mechanism is the entire prob
 
 **Correct staffing + Assignment workflow fix = 95% SLA achievable**
 
-Without the assignment fix, we could have 50 reps and still fail the SLA, because 
+Without the assignment fix, you could have 50 reps and still fail the SLA, because 
 opportunities sit in the unassigned pool for hours regardless of how many reps are waiting.
 
 ---
 
+### What the Assignment Fix Looks Like
+
+**Option 1 — Auto-Assignment (Recommended):** Configure Zoho CRM round-robin. 
+Opportunity is created → immediately assigned to the next available rep in rotation. 
+Pool time drops from hours to seconds.
+
+**Option 2 — Queue-Pull Model:** Reps see a live queue and pull the next opportunity 
+themselves. Pool time equals the time until a rep finishes their current task.
+
+Either approach eliminates the 6.6-hour bottleneck. With that fix in place and the 
+recommended staffing on your selected shift structure, the model's 95% SLA prediction holds.
+
+---
 
 ### Three Priority Actions
 
-**1. Fix assignment workflow** : auto-assign or queue-pull in Zoho CRM. 
+**1. Fix assignment workflow** — auto-assign or queue-pull in Zoho CRM. 
 Expected impact: SLA from 15.6% to 90%+ with NO additional hires.
 
-**2. Separate post-sale support from sales reps** : currently consuming ~30% of rep time. 
+**2. Separate post-sale support from sales reps** — currently consuming ~30% of rep time. 
 A dedicated support function pushes availability from 60% toward 70-80%, saving 2-3 FTEs.
 
-**3. Implement recommended shift coverage** : use the model's shift roster to ensure 
+**3. Implement recommended shift coverage** — use the model's shift roster to ensure 
 peak hours (2 PM–8 PM) have adequate concurrent coverage, including weekends.
 
 ---
@@ -749,7 +764,7 @@ with tabs[tab_idx]:
     opps_by_hour = [REF_HOURLY_LAMBDA[dt_key][h] * volume_ratio for h in range(24)]
 
     # Hourly agent requirement (scaled)
-    sla_factor = {'90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
+    sla_factor = {'75%': 0.80, '80%': 0.85, '85%': 0.88, '90%': 0.90, '95%': 1.00, '99%': 1.10}.get(sla_level, 1.00)
     avail_factor = 0.60 / availability
     agents_by_hour = [max(1, round(REF_HOURLY_STAFF[dt_key][h] * np.sqrt(volume_ratio)
                      * sla_factor * avail_factor)) for h in range(24)]
@@ -908,7 +923,7 @@ with tabs[tab_idx]:
     for v in sv:
         row = {'Volume': f"{v:,}"}
         for av in [0.50, 0.60, 0.70]:
-            for sla in ['90%', '95%', '99%']:
+            for sla in ['75%', '80%', '85%', '90%', '95%', '99%']:
                 if is_custom:
                     r = solve_custom_shift_lp(custom_shifts, v, av, sla, max_opps_per_rep, max_days)
                 else:
