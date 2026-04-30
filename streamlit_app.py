@@ -508,9 +508,7 @@ with st.sidebar:
 @st.dialog("Detailed Assessment — Will This Model Deliver 95% SLA?", width="large")
 def show_assessment_dialog():
     st.markdown("""
-### The Short Answer
-
-**The staffing numbers are correct — but they alone will NOT achieve the SLA target.**
+### Summary
 
 The model gives you the right number of people. However, it assumes opportunities are 
 assigned to reps **immediately** when they enter the pool. Your current reality is a 
@@ -519,7 +517,7 @@ any rep even sees the opportunity.
 
 ---
 
-### The Chain — And Where It Breaks
+### The Chain And Where It Breaks
 
 **What the model guarantees:**
 
